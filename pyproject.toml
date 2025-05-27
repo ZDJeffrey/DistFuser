@@ -1,0 +1,16 @@
+[project]
+name = "distfuser"
+version = "0.0.1"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "torch>=2.1.0",
+    "xfuser>=0.4.2",
+    "diffusers>=0.31.0",
+    "ray",
+    "verl @ git+https://github.com/volcengine/verl.git@v0.3.0.post1"
+]
+
+
+[project.optional-dependencies]
+flash-attn = ["flash-attn>=2.0.0"]
+sage-attn = ["sageattention @ git+https://github.com/thu-ml/SageAttention.git"]
