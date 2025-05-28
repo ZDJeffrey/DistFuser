@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Dict
 import torch
 import warnings
-from .base_worker import BaseWorker
+from .base_worker import BasexDiTWorker, BaseTorchDistWorker
 from .hidream_patch import HiDreamTextEncoderPipeline, HiDreamDiTPipeline, HiDreamVaePipeline
 from distfuser.utils import init_logger
 
@@ -43,18 +43,15 @@ HIDREAM_CONFIGS = {
 
 
 @ray.remote
-class HiDreamTextEncoderWorker(BaseWorker):
+class HiDreamTextEncoderWorker(BaseTorchDistWorker):
     def __init__(
         self,
         model_path: str,
         hidream_model_type: str = "full",
         llama_model_name: str = "meta-llama/Meta-Llama-3.1-8B-Instruct",
-        ulysses_degree: int = 1,
-        ring_degree: int = 1,
-        cfg_degree: int = 1,
         dtype: torch.dtype = torch.bfloat16,
     ):
-        super().__init__(ulysses_degree, ring_degree, cfg_degree)
+        super().__init__()
         logger.info(f"Initializing HiDreamTextEncoderWorker with " f"model_path={model_path}, rank={self.rank}, gpu_id={self.gpu_id}")
 
         if not HAS_HIDREAM_INSTALLED:
@@ -107,7 +104,7 @@ class HiDreamTextEncoderWorker(BaseWorker):
 
 
 @ray.remote
-class HiDreamDiTWorker(BaseWorker):
+class HiDreamDiTWorker(BasexDiTWorker):
     def __init__(
         self,
         model_path: str,
@@ -187,16 +184,13 @@ class HiDreamDiTWorker(BaseWorker):
 
 
 @ray.remote
-class HiDreamVaeWorker(BaseWorker):
+class HiDreamVaeWorker(BaseTorchDistWorker):
     def __init__(
         self,
         model_path: str,
-        ulysses_degree: int = 1,
-        ring_degree: int = 1,
-        cfg_degree: int = 1,
         dtype: torch.dtype = torch.bfloat16,
     ):
-        super().__init__(ulysses_degree, ring_degree, cfg_degree)
+        super().__init__()
 
         logger.info(f"Initializing HiDreamVaeWorker with " f"model_path={model_path}, rank={self.rank}, gpu_id={self.gpu_id}")
 
