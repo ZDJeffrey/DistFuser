@@ -3,13 +3,13 @@ from collections import defaultdict
 import torch
 import torch.distributed as dist
 from xfuser.core.distributed import init_distributed_environment, initialize_model_parallel
-from verl.single_controller.base import Worker
+from verl.single_controller.base import Worker as VerlWorker
 from distfuser.utils import init_logger
 
 logger = init_logger(__name__)
 
 
-class BaseTorchDistWorker(Worker):
+class BaseTorchDistWorker(VerlWorker):
     """Base Worker for torch distributed environment initialization"""
 
     def __init__(
@@ -76,7 +76,7 @@ class BaseTorchDistWorker(Worker):
             logger.warning(f"Error during cleanup: {e}")
 
 
-class BasexDiTWorker(Worker):
+class BasexDiTWorker(VerlWorker):
     """Base Worker using xDiT to do DiT inference"""
 
     def __init__(
