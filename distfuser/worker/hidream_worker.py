@@ -184,7 +184,7 @@ class HiDreamDiTWorker(BasexDiTWorker):
 
 
 @ray.remote
-class HiDreamVaeWorker(BasexDiTWorker):
+class HiDreamVaeWorker(BaseTorchDistWorker):
     def __init__(
         self,
         model_path: str,
