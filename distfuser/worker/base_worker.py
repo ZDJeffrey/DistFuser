@@ -22,7 +22,6 @@ class BaseTorchDistWorker(Worker):
         Args:
             backend: Distributed backend (nccl, gloo, mpi)
             init_method: URL specifying how to initialize the process group
-            timeout_seconds: Timeout for distributed operations
         """
         super().__init__()
         
@@ -87,7 +86,7 @@ class BasexDiTWorker(Worker):
         cfg_degree: int = 1,
     ):
         """
-        Initialize base worker
+        Initialize base worker running xdit inference engine
         Args:
             ulysses_degree: SP-Ulysses parallel degree
             ring_degree: SP-Ring parallel degree
@@ -137,3 +136,16 @@ class BasexDiTWorker(Worker):
         Generate output
         """
         raise NotImplementedError("Subclasses must implement forward method")
+
+    def cleanup_dist_env(self) -> None:
+        """Cleanup the distributed environment"""
+        if dist.is_initialized():
+            dist.destroy_process_group()
+            logger.info("Destroyed xdit distributed process group")
+        
+    def __del__(self):
+        """Cleanup when object is destroyed"""
+        try:
+            self.cleanup_dist_env()
+        except Exception as e:
+            logger.warning(f"Error during cleanup: {e}")

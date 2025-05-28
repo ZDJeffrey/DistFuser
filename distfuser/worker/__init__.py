@@ -1,6 +1,6 @@
 from .base_worker import (
     BaseTorchDistWorker,
-    BasexDiTWorker,  # Alias for backward compatibility
+    BasexDiTWorker,
 )
 from .hidream_worker import (
     HiDreamTextEncoderWorker,
