@@ -1,17 +1,16 @@
 import time
 import uuid
-import base64
 from io import BytesIO
 from pathlib import Path
 from typing import Dict
 import torch
-import warnings
 from .base_worker import BasexDiTWorker, BaseTorchDistWorker
 from .hidream_patch import HiDreamTextEncoderPipeline, HiDreamDiTPipeline, HiDreamVaePipeline
 from distfuser.utils import init_logger
 
 import ray
 from verl.single_controller.base.decorator import Dispatch, register
+from verl.single_controller.ray.base import RayClassWithInitArgs, RayResourcePool, RayWorkerGroup
 
 logger = init_logger(__name__)
 
@@ -46,13 +45,15 @@ HIDREAM_CONFIGS = {
 class HiDreamTextEncoderWorker(BaseTorchDistWorker):
     def __init__(
         self,
-        model_path: str,
-        hidream_model_type: str = "full",
+        model_path: str = "HiDream-ai/HiDream-I1-Fast",
+        hidream_model_type: str = "fast",
         llama_model_name: str = "meta-llama/Meta-Llama-3.1-8B-Instruct",
         dtype: torch.dtype = torch.bfloat16,
     ):
         super().__init__()
-        logger.info(f"Initializing HiDreamTextEncoderWorker with " f"model_path={model_path}, rank={self.rank}, gpu_id={self.gpu_id}")
+        logger.info(
+            f"Initializing HiDreamTextEncoderWorker with " f"model_path={model_path}, rank={self.rank}, gpu_id={self.gpu_id}"
+        )
 
         if not HAS_HIDREAM_INSTALLED:
             raise ImportError("hi_diffusers is not installed. Please install it.")
@@ -102,13 +103,40 @@ class HiDreamTextEncoderWorker(BaseTorchDistWorker):
         }
         return output
 
+    @staticmethod
+    def create_worker_group(
+        config,
+        resource_pool=None,
+        max_colocate_count: int = 1,
+    ) -> RayWorkerGroup:
+        if resource_pool is None:
+            resource_pool = RayResourcePool(
+                process_on_nodes=[config.get("workers_per_node", 1)] * config.get("nnodes", 1),
+                use_gpu=True,
+                name_prefix=config.get("name_prefix", ""),
+                max_colocate_count=max_colocate_count,
+            )
+        cls_with_init = RayClassWithInitArgs(
+            cls=HiDreamTextEncoderWorker,
+            model_path=config.get("model_path", "HiDream-ai/HiDream-I1-Fast"),
+            hidream_model_type=config.get("hidream_model_type", "fast"),
+            llama_model_name=config.get("llama_model_name", "meta-llama/Meta-Llama-3.1-8B-Instruct"),
+        )
+        if config.get("specific_device", None) is not None:
+            cls_with_init.set_additional_resource({config["specific_device"]: 1 / resource_pool.max_collocate_count})
+        return RayWorkerGroup(
+            resource_pool,
+            cls_with_init,
+            name_prefix=config.get("name_prefix", f"HiDreamTextEncoderWorker_{uuid.uuid4()}"),
+        )
+
 
 @ray.remote
 class HiDreamDiTWorker(BasexDiTWorker):
     def __init__(
         self,
-        model_path: str,
-        hidream_model_type: str = "full",
+        model_path: str = "HiDream-ai/HiDream-I1-Fast",
+        hidream_model_type: str = "fast",
         ulysses_degree: int = 1,
         ring_degree: int = 1,
         cfg_degree: int = 1,
@@ -182,12 +210,42 @@ class HiDreamDiTWorker(BasexDiTWorker):
     def adapt_output(self, result) -> Dict:
         return {"latents": result}
 
+    @staticmethod
+    def create_worker_group(
+        config,
+        resource_pool=None,
+        max_colocate_count: int = 1,
+    ) -> RayWorkerGroup:
+        if resource_pool is None:
+            resource_pool = RayResourcePool(
+                process_on_nodes=[config.get("workers_per_node", 1)] * config.get("nnodes", 1),
+                use_gpu=True,
+                name_prefix=config.get("name_prefix", ""),
+                max_colocate_count=max_colocate_count,
+            )
+        parallel_config = config.get("parallel_config", {})
+        cls_with_init = RayClassWithInitArgs(
+            cls=HiDreamDiTWorker,
+            model_path=config.get("model_path", "HiDream-ai/HiDream-I1-Fast"),
+            hidream_model_type=config.get("hidream_model_type", "fast"),
+            ulysses_degree=parallel_config.get("ulysses_degree", 1),
+            ring_degree=parallel_config.get("ring_degree", 1),
+            cfg_degree=parallel_config.get("cfg_parallel_degree", 1),
+        )
+        if config.get("specific_device", None):
+            cls_with_init.set_additional_resource({config["specific_device"]: 1 / resource_pool.max_collocate_count})
+        return RayWorkerGroup(
+            resource_pool,
+            cls_with_init,
+            name_prefix=config.get("name_prefix", f"HiDreamDiTWorker_{uuid.uuid4()}"),
+        )
+
 
 @ray.remote
 class HiDreamVaeWorker(BaseTorchDistWorker):
     def __init__(
         self,
-        model_path: str,
+        model_path: str = "HiDream-ai/HiDream-I1-Fast",
         dtype: torch.dtype = torch.bfloat16,
     ):
         super().__init__()
@@ -216,7 +274,21 @@ class HiDreamVaeWorker(BaseTorchDistWorker):
         image = self.pipe.generate(**adapted_params).images[0]
 
         if self.rank == 0:
-            output = self.adapt_output(image=image)
+            return_type = request.get("return_type", "file_path")
+            if return_type == "bytes":
+                buffer = BytesIO()
+                image.save(buffer, format="PNG")
+                image_bytes = buffer.getvalue()
+            else:
+                image_path = Path(f"results/{request.get('request_id', str(uuid.uuid4()))}.png")
+                image_path.parent.mkdir(parents=True, exist_ok=True)
+                image.save(image_path)
+
+            output = self.adapt_output(
+                image_path=str(image_path) if return_type == "file_path" else None,
+                image_bytes=image_bytes if return_type == "bytes" else None,
+            )
+
             elapsed_time = time.time() - start_time
             logger.info(f"HiDreamVaeWorker forward completed in {elapsed_time:.2f} seconds")
             return output
@@ -231,5 +303,30 @@ class HiDreamVaeWorker(BaseTorchDistWorker):
         }
         return adapted_params
 
-    def adapt_output(self, image) -> Dict:
-        return {"image": image}
+    def adapt_output(self, image_path: str, image_bytes: bytes) -> Dict:
+        return {"image_path": image_path, "image_bytes": image_bytes}
+
+    @staticmethod
+    def create_worker_group(
+        config,
+        resource_pool=None,
+        max_colocate_count: int = 1,
+    ) -> RayWorkerGroup:
+        if resource_pool is None:
+            resource_pool = RayResourcePool(
+                process_on_nodes=[config.get("workers_per_node", 1)] * config.get("nnodes", 1),
+                use_gpu=True,
+                name_prefix=config.get("name_prefix", ""),
+                max_colocate_count=max_colocate_count,
+            )
+        cls_with_init = RayClassWithInitArgs(
+            cls=HiDreamVaeWorker,
+            model_path=config.get("model_path", "HiDream-ai/HiDream-I1-Fast"),
+        )
+        if config.get("specific_device", None) is not None:
+            cls_with_init.set_additional_resource({config["specific_device"]: 1 / resource_pool.max_collocate_count})
+        return RayWorkerGroup(
+            resource_pool,
+            cls_with_init,
+            name_prefix=config.get("name_prefix", f"HiDreamVaeWorker_{uuid.uuid4()}"),
+        )

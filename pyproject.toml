@@ -7,7 +7,10 @@ dependencies = [
     "xfuser>=0.4.2",
     "diffusers>=0.31.0",
     "ray",
-    "verl @ git+https://github.com/volcengine/verl.git@v0.3.0.post1"
+    "verl>=0.3.0.post1",
+    "torchao",
+    "fastapi",
+    "uvicorn[standard]"
 ]
 
 

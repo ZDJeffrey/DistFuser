@@ -1,13 +1,15 @@
+import uuid
 import time
-from argparse import ArgumentParser
 import warnings
 from pathlib import Path
-import uuid
+from argparse import ArgumentParser
 
-from distfuser import HiDreamTextEncoderWorker, HiDreamDiTWorker, HiDreamVaeWorker
 from verl.single_controller.ray.base import RayClassWithInitArgs, RayResourcePool, RayWorkerGroup
 
+from distfuser import HiDreamTextEncoderWorker, HiDreamDiTWorker, HiDreamVaeWorker
+
 warnings.filterwarnings("ignore")
+
 
 def pipeline_forward(request, encoder_group, dit_group, vae_group):
     """
@@ -21,12 +23,12 @@ def pipeline_forward(request, encoder_group, dit_group, vae_group):
 
 def main(args):
     # Initialize the resource pool
-    dit_pool = RayResourcePool([args.dit_num_gpus], use_gpu=True, name_prefix="dit")
+    dit_pool = RayResourcePool([args.dit_num_gpus], use_gpu=True, name_prefix="dit", max_colocate_count=1)
     if args.merge_textencoder_vae:
-        encoder_pool = vae_pool = RayResourcePool([1], use_gpu=True, name_prefix="textencoder_vae")
+        encoder_pool = vae_pool = RayResourcePool([1], use_gpu=True, name_prefix="textencoder_vae", max_colocate_count=2)
     else:
-        encoder_pool = RayResourcePool([1], use_gpu=True, name_prefix="textencoder")
-        vae_pool = RayResourcePool([1], use_gpu=True, name_prefix="vae")
+        encoder_pool = RayResourcePool([1], use_gpu=True, name_prefix="textencoder", max_colocate_count=1)
+        vae_pool = RayResourcePool([1], use_gpu=True, name_prefix="vae", max_colocate_count=1)
 
     # Initialize the worker groups
     dit_class_with_args = RayClassWithInitArgs(
@@ -85,7 +87,7 @@ def main(args):
         output_dir = Path("results/hidream")
         output_dir.mkdir(parents=True, exist_ok=True)
         image_path = output_dir / f"{args.model_type}_{args.height}x{args.width}_{uuid.uuid4()}.png"
-        output['image'].save(image_path)
+        output["image"].save(image_path)
         print(f"Image saved to {image_path}")
 
 
@@ -106,7 +108,9 @@ if __name__ == "__main__":
     parser.add_argument("--warmup_steps", type=int, default=0, help="Number of warmup steps")
     parser.add_argument("--guidance_scale", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--output_type", type=str, default="pil", choices=["pil", "latent"], help="Output type for image generation")
+    parser.add_argument(
+        "--output_type", type=str, default="pil", choices=["pil", "latent"], help="Output type for image generation"
+    )
     parser.add_argument("--dit_num_gpus", type=int, default=1, help="Number of GPUs for DiT worker")
     parser.add_argument("--ulysses_degree", type=int, default=1, help="Degree of the SP-Ulysses")
     parser.add_argument("--ring_degree", type=int, default=1, help="Degree of the SP-Ring")

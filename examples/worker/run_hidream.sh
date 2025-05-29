@@ -35,7 +35,7 @@ PARALLEL_ARGS="--dit_num_gpus 2 --ulysses_degree 2 --ring_degree 1"
 # For high-resolution images, we use the latent output type to avoid runing the vae module. Used for measuring speed.
 # OUTPUT_ARGS="--output_type latent"
 
-python ./examples/hidream_example.py \
+python ./examples/worker/hidream_example.py \
 --model $MODEL_ID \
 --llama_model $LLAMA_MODEL \
 --model_type $MODEL_TYPE \

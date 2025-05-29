@@ -1,0 +1,36 @@
+http_server:
+  host: "localhost"
+  port: 8000
+
+hidream_config:
+  model_path: /file_system/models/dit/HiDream-I1-Full
+  model_type: full
+
+workflow:
+  encoder:
+    model_path: ${hidream_config.model_path}
+    hidream_model_type: ${hidream_config.model_type}
+    llama_model_name: /file_system/models/Meta-Llama/Meta-Llama-3.1-8B-Instruct
+    workers_per_node: 1
+    nnodes: 1
+    name_prefix: hidream_textencoder
+    # specific_device: GPU_H20
+
+  dit:
+    model_path: ${hidream_config.model_path}
+    hidream_model_type: ${hidream_config.model_type}
+    workers_per_node: 2
+    nnodes: 1
+    parallel_config:
+      ulysses_degree: 1
+      ring_degree: 1
+      cfg_parallel_degree: 2
+    name_prefix: hidream_dit
+    # specific_device: GPU_H20
+
+  vae:
+    model_path: ${hidream_config.model_path}
+    workers_per_node: 1
+    nnodes: 1
+    name_prefix: hidream_vae
+    # specific_device: GPU_4090
