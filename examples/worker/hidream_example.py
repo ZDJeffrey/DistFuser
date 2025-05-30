@@ -1,5 +1,5 @@
-import uuid
 import time
+from datetime import datetime
 import warnings
 from pathlib import Path
 from argparse import ArgumentParser
@@ -63,6 +63,7 @@ def main(args):
             "width": args.width,
             "guidance_scale": args.guidance_scale,
             "output_type": args.output_type,
+            "return_type": "bytes",
         }
         output = pipeline_forward(request, encoder_group, dit_group, vae_group)
         print("Warmup completed.")
@@ -77,6 +78,7 @@ def main(args):
         "num_inference_steps": args.num_inference_steps,
         "seed": args.seed,
         "output_type": args.output_type,
+        "return_type": "bytes",
     }
     start_time = time.perf_counter()
     output = pipeline_forward(request, encoder_group, dit_group, vae_group)
@@ -84,10 +86,11 @@ def main(args):
     print(f"Total time: {end_time - start_time:.2f} seconds")
 
     if args.output_type == "pil":
-        output_dir = Path("results/hidream")
+        output_dir = Path("results/")
         output_dir.mkdir(parents=True, exist_ok=True)
-        image_path = output_dir / f"{args.model_type}_{args.height}x{args.width}_{uuid.uuid4()}.png"
-        output["image"].save(image_path)
+        image_path = output_dir / f"hidream_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png"
+        with image_path.open("wb") as f:
+            f.write(output['image_bytes'])
         print(f"Image saved to {image_path}")
 
 
